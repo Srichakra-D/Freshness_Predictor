@@ -1,103 +1,82 @@
 # Fruit Freshness Predictor
 
-This repository contains a freshness classifier for fruit and vegetable images.
-The app loads a saved PyTorch model from `model.pth`, accepts an uploaded image,
-and predicts:
+A Streamlit application that uses a multitask PyTorch model to identify produce
+and classify it as fresh or spoiled.
 
-- the fruit or vegetable class
-- whether the item is fresh or spoiled
+## Features
 
-The main runnable app is implemented with Streamlit in `main.py`.
+- Upload `jpg`, `jpeg`, or `png` images through a browser interface.
+- Predict one of nine fruit and vegetable classes.
+- Predict freshness as `Fresh` or `Spoiled`.
+- Show softmax confidence for both model outputs.
+- Warn when either prediction has less than 55% confidence.
 
-## Repository Contents
+## Architecture
 
-| File | Purpose |
+The deployed model uses VGG16 convolutional features followed by a shared dense
+layer and two classification heads:
+
+| Head | Classes |
 | --- | --- |
-| `main.py` | Streamlit inference app for uploading an image and getting a prediction. |
-| `model.pth` | Saved PyTorch model state dictionary used by the app. |
-| `project-compvis-lec.ipynb` | Kaggle-style training and evaluation notebook for the fresh/spoiled classifier. |
-| `freshness_predictor.ipynb` | Earlier notebook version of the predictor with a Tkinter interface. |
-| `requirements.txt` | Base Python dependencies currently tracked in the repo. |
+| Produce | apples, banana, bittergroud, capsicum, cucumber, okra, oranges, potato, tomato |
+| Freshness | Fresh, Spoiled |
 
-## Model Summary
+`inference.py` owns the model architecture, preprocessing, checkpoint loading,
+and prediction result. `main.py` contains only the Streamlit interface.
 
-The deployed model uses a VGG16 feature extractor with two custom output heads:
-
-- fruit class head: 9 classes
-- freshness head: 2 classes
-
-`model.pth` was checked as a PyTorch `state_dict` with compatible output shapes:
-
-- `block2.3.weight`: `(9, 128)`
-- `block3.3.weight`: `(2, 32)`
+The committed `model.pth` checkpoint contains a compatible PyTorch state
+dictionary. Images are converted to RGB, resized to `224x224`, and converted to
+tensors using the same identity normalization as the training notebook.
 
 ## Setup
 
-Create and activate a Python 3.10+ virtual environment, then install
-dependencies:
+Python 3.10 or newer is recommended.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-On Windows, activate the environment with:
-
-```powershell
-.venv\Scripts\activate
-```
-
-The Streamlit app expects `model.pth` to be beside `main.py`, which is the
-repository root in the current layout.
-
-## Run the App
-
-Start the Streamlit app from the repository root:
-
-```bash
 streamlit run main.py
 ```
 
-Then open the local URL shown by Streamlit and upload a `jpg`, `jpeg`, or `png`
-image.
+For development and testing:
 
-## Training Notebook Notes
-
-`project-compvis-lec.ipynb` is a Kaggle notebook built around the
-`fresh-and-stale-classification` dataset. It contains:
-
-- data loading from Kaggle paths
-- train, validation, and test splits
-- image augmentation and PyTorch `DataLoader` setup
-- VGG16-based model training
-- loss and accuracy plots
-- confusion matrices
-- classification reports
-
-The notebook metadata indicates a Kaggle GPU environment and references dataset
-ID `3371317`. It should be run in Kaggle or in a local environment where the same
-dataset paths are available.
-
-## Label Order
-
-The training notebook derives fruit labels with `LabelEncoder`. The Streamlit
-app uses the same class order:
-
-```text
-apples, banana, bittergroud, capsicum, cucumber, okra, oranges, potato, tomato
+```bash
+pip install -r requirements-dev.txt
+pytest
 ```
 
-Keep this order unchanged unless the model is retrained with a different
-encoder.
+## Repository Contents
 
-## Current Caveats
+| Path | Purpose |
+| --- | --- |
+| `main.py` | Streamlit user interface |
+| `inference.py` | Reusable model and inference pipeline |
+| `model.pth` | Trained model state dictionary |
+| `project-compvis-lec.ipynb` | Kaggle training and evaluation notebook |
+| `freshness_predictor.ipynb` | Earlier Tkinter prototype |
+| `tests/` | Automated inference and checkpoint tests |
 
-- The app preprocessing follows the inference transform from the training
-  notebook: resize to `224x224`, convert to tensor, and identity normalization.
-- `project-compvis-lec.ipynb` contains saved notebook outputs and plots, making
-  it larger than a clean source-only notebook.
-- The final saved notebook report shows high freshness accuracy, but fruit-class
-  test accuracy is low for several classes. The saved test labels include naming
-  inconsistencies such as `patato` and `tamto`, so verify label consistency
-  before reporting model performance.
+## Training and Evaluation
+
+The Kaggle notebook uses the
+`fresh-and-stale-classification` dataset, dataset ID `3371317`. It now:
+
+- normalizes the source label typos `patato` and `tamto`;
+- fits one `LabelEncoder` and reuses it for train, validation, and test data;
+- uses a training method that does not override `torch.nn.Module.train`;
+- computes epoch accuracy from sample counts rather than cumulative metrics.
+
+Saved notebook outputs were removed because the previous fruit accuracy was
+computed with inconsistent train and test encoders. Retrain and rerun all cells
+in Kaggle before publishing updated performance numbers.
+
+## Limitations
+
+- Confidence values are raw softmax scores and are not calibrated probabilities.
+- The model always chooses a supported class; the warning is not an
+  out-of-distribution detector.
+- Performance depends on lighting, framing, and whether the image resembles the
+  training dataset.
+- The test dataset does not contain every training class, so per-class reports
+  must explicitly include only labels represented by the evaluated split.
